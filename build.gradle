@@ -1,0 +1,188 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'java-library'
+    id 'application'
+    id "io.github.fourlastor.construo" version "1.3.0"
+}
+
+import org.gradle.internal.os.OperatingSystem
+
+project.ext.log4jVersion = "2.23.1"
+project.ext.slf4jVersion = "2.0.16"
+
+project.ext.lwjglVersion = "3.3.4"
+project.ext.jomlVersion  = "1.10.7"
+project.ext.joml_primitivesVersion = "1.10.0"
+
+switch (OperatingSystem.current()) {
+    case OperatingSystem.LINUX:
+        project.ext.lwjglNatives = "natives-linux"
+        def osArch = System.getProperty("os.arch")
+        if (osArch.startsWith("arm") || osArch.startsWith("aarch64")) {
+            project.ext.lwjglNatives += osArch.contains("64") || osArch.startsWith("armv8") ? "-arm64" : "-arm32"
+        } else if  (osArch.startsWith("ppc")) {
+            project.ext.lwjglNatives += "-ppc64le"
+        } else if  (osArch.startsWith("riscv")) {
+            project.ext.lwjglNatives += "-riscv64"
+        }
+        break
+    case OperatingSystem.WINDOWS:
+        project.ext.lwjglNatives = "natives-windows"
+        break
+}
+
+compileJava {
+    options.incremental = true
+}
+
+compileJava.doLast {
+    def assetsFolder = new File("${project.rootDir}/assets/")
+    def assetsFile = new File(assetsFolder, "assets.txt")
+    assetsFile.delete()
+
+    fileTree(assetsFolder).collect { assetsFolder.relativePath(it) }.each {
+        assetsFile.append(it + "\n")
+    }
+}
+
+group = 'dev.atomixsoft'
+version = '0.0.1'
+
+sourceSets.main.resources.srcDirs += [ rootProject.file('assets').path ]
+
+project.ext.appName = "block_game"
+mainClassName = 'dev.atomixsoft.Main'
+application.setMainClass(mainClassName)
+
+java.sourceCompatibility = JavaVersion.toVersion(17)
+java.targetCompatibility = JavaVersion.toVersion(21)
+
+if(JavaVersion.current().isJava9Compatible()) {
+    compileJava.options.release.set(21)
+}
+
+repositories {
+    mavenCentral()
+    gradlePluginPortal()
+    google()
+    maven { url 'https://s01.oss.sonatype.org' }
+    // You may want to remove the following line if you have errors downloading dependencies.
+    mavenLocal()
+    maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+    maven { url 'https://s01.oss.sonatype.org/content/repositories/snapshots/' }
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+
+    implementation platform("org.lwjgl:lwjgl-bom:$lwjglVersion")
+
+    implementation "org.lwjgl:lwjgl"
+    implementation "org.lwjgl:lwjgl-assimp"
+    implementation "org.lwjgl:lwjgl-bgfx"
+    implementation "org.lwjgl:lwjgl-glfw"
+    implementation "org.lwjgl:lwjgl-nanovg"
+    implementation "org.lwjgl:lwjgl-nuklear"
+    implementation "org.lwjgl:lwjgl-openal"
+    implementation "org.lwjgl:lwjgl-opengl"
+    implementation "org.lwjgl:lwjgl-par"
+    implementation "org.lwjgl:lwjgl-stb"
+    implementation "org.lwjgl:lwjgl-vulkan"
+
+    implementation "org.apache.logging.log4j:log4j-api:${log4jVersion}"
+    implementation "org.apache.logging.log4j:log4j-core:${log4jVersion}"
+
+    implementation "org.joml:joml:${jomlVersion}"
+    implementation "org.joml:joml-primitives:${joml_primitivesVersion}"
+
+    runtimeOnly "org.lwjgl:lwjgl::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-assimp::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-bgfx::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-glfw::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-nanovg::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-nuklear::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-openal::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-opengl::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-par::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-stb::$lwjglNatives"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+run {
+    workingDir = rootProject.file('assets').path
+    setIgnoreExitValue(true)
+}
+
+jar {
+// sets the name of the .jar file this produces to the name of the game or app, with the version after.
+    archiveFileName.set("${appName}-${projectVersion}.jar")
+// the duplicatesStrategy matters starting in Gradle 7.0; this setting works.
+    duplicatesStrategy(DuplicatesStrategy.EXCLUDE)
+    dependsOn configurations.runtimeClasspath
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+// these "exclude" lines remove some unnecessary duplicate files in the output JAR.
+    exclude('META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA')
+    dependencies {
+        exclude('META-INF/INDEX.LIST', 'META-INF/maven/**')
+    }
+// setting the manifest makes the JAR runnable.
+    manifest {
+        attributes 'Main-Class': project.mainClassName
+    }
+// this last step may help on some OSes that need extra instruction to make runnable JARs.
+    doLast {
+        file(archiveFile).setExecutable(true, false)
+    }
+}
+
+import io.github.fourlastor.construo.Target
+
+construo {
+    // name of the executable
+    name.set(appName)
+    // human-readable name, used for example in the `.app` name for macOS
+    humanName.set(appName)
+    // Optional, defaults to project version property
+    version.set('$projectVersion')
+
+    jlink {
+        // add arbitrary modules to be included when running jlink
+        modules.addAll("jdk.zipfs")
+    }
+
+    targets.configure {
+        create("winX64", Target.Windows) {
+            architecture.set(Target.Architecture.X86_64)
+            jdkUrl.set("https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.1%2B12/OpenJDK21U-jdk_x64_windows_hotspot_21.0.1_12.zip")
+            // use executable with GPU hints, defaults to true
+            //useGpuHint.set(false)
+        }
+    }
+}
+
+tasks.register('dist') {
+    dependsOn 'jar'
+}
+
+distributions {
+    main {
+        contents {
+            into('libs') {
+                project.configurations.runtimeClasspath.files.findAll { file ->
+                    file.getName() != project.tasks.jar.outputs.files.singleFile.name
+                }.each { file ->
+                    exclude file.name
+                }
+            }
+        }
+    }
+}
+
+startScripts.dependsOn(':jar')
+startScripts.classpath = project.tasks.jar.outputs.files

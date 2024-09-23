@@ -1,0 +1,12 @@
+fonts/font-template.xcf
+fonts/font_w.png
+fonts/proj_w.xcf
+graphics/block.png
+graphics/blocks.png
+graphics/blocks.xcf
+grid_test.xcf
+log4j2.xml
+shaders/2d.frag
+shaders/2d.vert
+shaders/3d.frag
+shaders/3d.vert
